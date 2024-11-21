@@ -1,0 +1,561 @@
+---
+title: "Reproducible Research: courseProject2"
+author: "Jess Li"
+date: "2024-11-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Synopsis
+This project explores the United States storm database, which documents major storms and weather events, along with their estimated impacts (including fatalities, damages, etc.), from 1950 to 2011. The data, sourced from the National Oceanic and Atmospheric Administration (NOAA), required significant pre-processing due to poor initial reporting. The dataset was cleaned, and values were re-coded to facilitate analysis. Through data visualization, the events most harmful to both public health and the economy were identified. This report includes both the code and the results generated during the project.
+
+
+# Data Processing
+## Download raw data and load it into R
+```{r}
+## download the data file
+url <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+download.file(url, "repdata_StormData.csv.bz2")
+## load it into R
+raw_data <- read.csv("repdata_StormData.csv.bz2", header = TRUE, sep = ",")
+```
+## Basic exploring of the raw data
+View all the variables
+```{r}
+str(raw_data)
+```
+
+From the output and the documentation from the link: https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf
+The following variables are relevant to the questions of interest. questions.
+- Event begin date (BGN_DATE)
+- Event type (EVTYPE)
+- State name (STATE): potentially used to explore the geographical pattern
+- Fatalities (FATALITIES) : related to impact on population health
+- Injuries (INJURIES): related to impact on population health
+- Property damages (PROPDMG): related to economic consequences
+- Property damages exponents (PROPDMGEXP)
+- Crop damages(CROPDMG): related to economic consequences
+- Crop damages exponents(CROPDMGEXP): related to economic consequences
+Subset the data that contains the above variables only
+```{r}
+## load library
+library(dplyr)
+## subset data
+our_data <- raw_data %>% 
+  select(BGN_DATE,EVTYPE,STATE,FATALITIES,INJURIES,
+         PROPDMG,PROPDMGEXP,CROPDMG,CROPDMGEXP)
+```
+
+## Further exploring: event type
+Unique Event type number: there are way too many types of event (>900), we need to clean them
+```{r}
+length(unique(our_data$EVTYPE)) 
+```
+There are 48 types of event documented in the given document. We should consider how to transfer or redefine this column of EVTYPE based on the 48 pre-defined types.
+```{r}
+library(stringr) # load library
+
+## unify the cases
+our_data$EVTYPE <- tolower(our_data$EVTYPE)
+## correct misspell or abbreviation
+our_data$EVTYPE <- our_data$EVTYPE %>%
+    str_replace_all("avalance", "avalanche") %>% # avalanches
+    str_replace_all("erosin", "erosion") %>%
+    str_replace_all("coastalstorm", "coastal storm ") %>%
+    str_replace_all("cstl", "coastal") %>%
+    str_replace_all("devel", "devil") %>%
+    str_replace_all("sno$", "snow$") %>%
+    str_replace_all("tstm", "thunderstorm") %>%
+    str_replace_all("thundeerstorm", "thunderstorm") %>%
+     str_replace_all("tunderstorm", "thunderstorm") %>%
+    str_replace_all("tstmw", "thunderstorm wind") %>%
+    str_replace_all("temps", "temperatures") %>%
+    str_replace_all("wintry", "wintery") %>%
+    str_replace_all("hvy", "heavy") %>%
+    str_replace_all("flooding", "flood") 
+
+
+## transform all related tyeps into the 48 types
+## 1 Astronomical Low Tide
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("astro.*low.*tide$", "Astronomical Low Tide") 
+
+## 2 Avalanche
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^avalan.*$", "Avalanche")  
+  
+## 3 Blizzard 
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^blizzard.*$", "Blizzard") %>%
+  str_replace_all("blow.*snow.*$", "Blizzard") 
+
+## 4 Coastal Flood
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^coastal.*flood.*$", "Coastal Flood") %>%
+  str_replace_all(".*coastal.*flood.*$", "Coastal Flood") %>%
+  str_replace_all("^beach.*flood.*$", "Coastal Flood") %>%
+  str_replace_all("^beach.*erosion*$", "Coastal Flood") %>%
+  str_replace_all("^erosion.*$", "Coastal Flood")
+
+## 5 Cold/Wind Chill
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all(".*cold.*chill.*", "Cold/Wind Chill") %>%
+  str_replace_all(".*wind.*chill.*", "Cold/Wind Chill") %>%
+  str_replace_all(".*cold.*wind.*", "Cold/Wind Chill") %>%
+  str_replace_all("cold", "Cold/Wind Chill") %>%
+  str_replace_all("cold air funnel.*", "Cold/Wind Chill") %>%
+  str_replace_all("cold temperature.*", "Cold/Wind Chill") %>%
+  str_replace_all("cold weather", "Cold/Wind Chill") 
+
+## 6 Debris Flow
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all(".*debr.*flow.*", "Debris Flow") %>% 
+  str_replace_all(".*rock.*", "Debris Flow") %>% 
+  str_replace_all(".*mudflow.*", "Debris Flow")
+
+## 7 Dense Fog
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all(".*fog.*", "Dense Fog") 
+
+## 8 Dense Smoke
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all(".*smoke.*", "Dense Smoke") 
+
+## 9 Drought 
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^drought.*", "Drought") %>%
+  str_replace_all("^dry.*", "Drought") %>%
+  str_replace_all("^dryness.*", "Drought") %>%
+  str_replace_all(".*dry$", "Drought") 
+
+## 10 Dust Devil 
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^dust devil.*", "Dust Devil") 
+
+## 11 Dust Storm
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^dust storm.*", "Dust Storm") %>%
+  str_replace_all("^duststorm.*", "Dust Storm") %>%
+  str_replace_all("^blowing dust", "Dust Storm") 
+
+## 12 Excessive Heat
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^excessive heat.*", "Excessive Heat") %>%
+  str_replace_all("^extreme heat.*", "Excessive Heat")
+
+## 13 Extreme Cold/Wind Chill
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^extreme.*chill.*", "Extreme Cold/Wind Chill") %>%
+  str_replace_all("^extreme cold.*", "Extreme Cold/Wind Chill") %>%
+  str_replace_all("excessive/extended cold", "Extreme Cold/Wind Chill") %>%
+  str_replace_all("extreme/record cold", "Extreme Cold/Wind Chill")
+
+## 14 Flash Flood
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^flash flood.*", "Flash Flood") %>%
+  str_replace_all(".*flash.*flood.*", "Flash Flood") %>%
+  str_replace_all(".*flood.*flash.*", "Flash Flood")
+
+## 15 Flood
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^flood$", "Flood") %>%
+  str_replace_all("floods", "Flood")%>%
+  str_replace_all("^flooding$", "Flood") %>%
+  str_replace_all(".*flood.*rain.*", "Flood")
+
+## 16 Freezing Fog
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^freezing fog$", "Freezing Fog") 
+
+## 17 Frost/Freeze
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^frost.*freeze$", "Frost/Freeze") %>%
+  str_replace_all("freeze$", "Frost/Freeze") %>%
+  str_replace_all("^frost.*", "Frost/Freeze") %>%
+  str_replace_all("^freezing rain.*", "Frost/Freeze") %>%
+  str_replace_all("^freezing spray*", "Frost/Freeze") %>%
+  str_replace_all("^freezing drizzle.*$", "Frost/Freeze") %>%
+  str_replace_all("cold and frost", "Frost/Freeze") %>%
+  str_replace_all("damaging|early freeze|frost", "Frost/Freeze") 
+
+## 18 Funnel Cloud
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^funnel cloud$", "Funnel Cloud") %>%
+  str_replace_all("^funnel.*", "Funnel Cloud")
+
+## 19 Hail
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^hail.*", "Hail") %>%
+  str_replace_all(".*hail$", "Hail")
+
+## 20 Heat
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^heat.*", "Heat")
+
+## 21 Heavy Rain
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^heavy rain.*", "Heavy Rain") %>%
+  str_replace_all("^heavy precipitation$", "Heavy Rain") %>%
+  str_replace_all("^heavy shower.*", "Heavy Rain")
+
+## 22 Heavy Snow
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^heavy snow.*", "Heavy Snow") 
+
+## 23 High Surf
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^heavy surf.*", "High Surf") %>%
+  str_replace_all("^high surf.*", "High Surf") %>%
+  str_replace_all("^high seas.*", "High Surf") %>%
+  str_replace_all("^high wave.*", "High Surf") %>%
+  str_replace_all("^high water.*", "High Surf") %>%
+  str_replace_all("high surf advisory", "High Surf") 
+
+## 24 High Wind
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^heavy winds.*", "High Surf") %>%
+  str_replace_all("^high wind.*", "High Surf")
+
+## 25 Hurricane/Typhoon
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^hurricane.*", "Hurricane/Typhoon") %>%
+  str_replace_all("^typhoon$", "Hurricane/Typhoon")
+
+## 26 Ice Storm
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^ice.*storm", "Ice Storm") %>%
+  str_replace_all("^ice.*snow.*$", "Ice Storm")
+
+## 27 Lakeshore Flood
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^lake.*flood", "Lakeshore Flood") %>%
+  str_replace_all("^lakeshore flood", "Lakeshore Flood")
+
+## 28 Lake-Effect Snow
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^lake effect snow", "Lake-Effect Snow") %>%
+  str_replace_all("^lake-effect snow", "Lake-Effect Snow")
+
+## 29 Lightning
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^lightning.*", "Lightning")
+
+## 30 Marine Hail
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^marine hail*", "Marine Hail") 
+
+## 31 Marine High Wind
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^marine high wind*", "Marine High Wind") 
+
+## 32 Marine Strong Wind
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^marine strong wind*", "Marine Strong Wind")
+
+## 33 Marine Thunderstorm Wind
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^marine thunderstorm wind*", "Marine Thunderstorm Wind")
+
+## 34 Rip Current 
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^rip current.*", "Rip Current")
+
+## 35 Seiche 
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^seiche", "Seiche")
+
+## 36 Sleet 
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^sleet.*", "Sleet") %>%
+  str_replace_all("snow.*sleet.*", "Sleet")
+
+## 37 Storm Surge/Tide 
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^storm surge/tide", "Storm Surge/Tide")
+
+## 38 Strong Wind
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^strong wind.*", "Strong Wind")
+
+## 39 Thunderstorm Wind
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("thunderstorm wind.*$", "Thunderstorm Wind") %>%
+  str_replace_all("^thunderstorm w inds.*", "Thunderstorm Wind") %>%
+  str_replace_all("^thunderstorm   winds.*", "Thunderstorm Wind") %>%
+  str_replace_all("severe thunderestorm.*", "Thunderstorm Wind")
+
+## 40 Tornado
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^tornado.*", "Tornado")
+
+## 41 Tropical Depression
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^tropical depression.*", "Tropical Depression")
+
+## 42 Tropical Storm
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^tropical storm.*", "Tropical Storm")
+
+## 43 Tsunami
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^tsunami.*", "Tsunami")
+
+## 44 Volcanic Ash
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^volcanic ash.*", "Volcanic Ash")
+
+## 45 Waterspout
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("waterspout", "Waterspout")
+
+## 46 Wildfire
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^wildfire.*", "Wildfire")
+
+## 47 Winter Storm
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^winter storm.*", "Winter Storm")
+
+## 48 Winter Weather
+our_data$EVTYPE <- our_data$EVTYPE %>%
+  str_replace_all("^winter weather.*", "Winter Weather")
+```
+After this, there are still many left (~400) that is hard to be assigned to the 48 types of events that is in record. We kept only the 48 types for later analysis.
+```{r}
+library(dplyr) # load library
+## select only the 48 types of events
+events_in_record <- c("Astronomical Low Tide","Avalanche",
+                     "Blizzard","Coastal Flood",
+                     "Cold/Wind Chill","Debris Flow",
+                     "Dense Fog","Dense Smoke",
+                     "Drought","Dust Devil",
+                     "Dust Storm","Excessive Heat",
+                     "Extreme Cold/Wind Chill","Flash Flood",
+                     "Flood","Freezing Fog",
+                     "Frost/Freeze","Funnel Cloud",
+                     "Hail","Heat","Heavy Rain",
+                     "Heavy Snow","High Surf","High Wind",
+                     "Hurricane/Typhoon","Ice Storm",
+                     "Lake-Effect Snow",
+                     "Lakeshore Flood","Lightning",
+                     "Marine Hail", "Marine High Wind",
+                     "Marine Strong Wind",
+                     "Marine Thunderstorm Wind",
+                     "Rip Current", "Seiche","Sleet",
+                     "Storm Surge/Tide","Strong Wind",
+                     "Thunderstorm Wind","Tornado",
+                     "Tropical Depression","Tropical Storm",
+                     "Tsunami","Volcanic Ash",
+                     "Waterspout","Wildfire","Winter Storm","Winter Weather")
+our_data_coded <- our_data %>%
+                filter(EVTYPE %in% events_in_record)
+```
+
+
+
+## further exploring: check other variables
+Summary of the related variables
+```{r}
+summary(our_data_coded$FATALITIES)
+summary(our_data_coded$INJURIES)
+summary(our_data_coded$PROPDMG)
+summary(our_data_coded$PROPDMGEXP)
+summary(our_data_coded$CROPDMG)
+summary(our_data_coded$CROPDMGEXP)
+```
+Both types of damages (property and crop) values are encoded with exponents . Needs to be recalculated into true numbers. 
+```{r}
+unique(our_data_coded$PROPDMGEXP)
+unique(our_data_coded$CROPDMGEXP)
+```
+Values in -EXP columns like  H/h, K/k, M/m, B/b are easily interpreted; Others are not clear, so further check what they may represent.
+```{r}
+## check different values from 1 to 8, manually change the number
+head(filter(our_data_coded,PROPDMGEXP==1)) 
+## do the same for the other values like "+","-"
+head(filter(our_data_coded,PROPDMGEXP=="-")) 
+```
+After checking all the other values, I decided to treat the number (0,1,2...etc.) in -EXP column as the exponent value, for example, if the -EXP column is 2, I will multiple the damage value with 10^2. 
+The "+", "-", ?" and "" will be ignored or considered null, i.e., set as NA 
+The other letters will be transformed into the number they represent, for example, H/h stands for hundreds, so it will be transformed into 10^2, i.e., 100.
+```{r}
+## transform
+library(stringr) # load library
+our_data_coded$PROPDMGEXP <- our_data_coded$PROPDMGEXP %>% str_replace_all("0","1") %>%
+          str_replace_all("1","10") %>% str_replace_all("2","100") %>%
+          str_replace_all("3","1000") %>% str_replace_all("4","10000") %>%
+          str_replace_all("5","100000") %>%  str_replace_all("6","1000000") %>% 
+          str_replace_all("7","10000000") %>% str_replace_all("8","100000000") %>%       
+          str_replace_all("H","100") %>% str_replace_all("h","100") %>% 
+          str_replace_all("K","1000") %>% 
+          str_replace_all("M","1000000") %>% str_replace_all("m","1000000") %>%
+          str_replace_all("B","1000000000")
+our_data_coded$CROPDMGEXP <- our_data_coded$CROPDMGEXP %>% str_replace_all("0","1") %>%
+          str_replace_all("2","100") %>%
+          str_replace_all("K","1000") %>% str_replace_all("k","1000") %>% 
+          str_replace_all("M","1000000") %>% str_replace_all("m","1000000") %>%
+          str_replace_all("B","1000000000")
+
+unique(our_data_coded$PROPDMGEXP)
+unique(our_data_coded$CROPDMGEXP)
+
+## turn into numeric values, "+""-""?""" will be turned to NA
+our_data_coded$PROPDMGEXP <-  as.numeric(our_data_coded$PROPDMGEXP)
+our_data_coded$CROPDMGEXP <-  as.numeric(our_data_coded$CROPDMGEXP)
+
+summary(our_data_coded$PROPDMGEXP)
+summary(our_data_coded$CROPDMGEXP)
+
+
+```
+
+Calculate the true values for the damages
+```{r}
+our_data_coded <- our_data_coded %>% 
+                mutate(PROPDMG_T = PROPDMG*PROPDMGEXP) %>%
+                mutate(CROPDMG_T = CROPDMG*CROPDMGEXP)
+summary(our_data_coded$PROPDMG_T)
+summary(our_data_coded$CROPDMG_T)
+```
+
+
+
+# Results: to address the two following main questions
+1. Across the United States, which types of events are most harmful with respect to population health?
+
+```{r}
+library(stringr) # load library
+library(ggplot2)
+library(dplyr)
+
+## summarize the health-realted variable: fatality, injury 
+## and calculate the total of both types
+health <- our_data_coded %>%
+            group_by(EVTYPE) %>%
+            summarize(sum_fata = sum(FATALITIES,na.rm=TRUE), 
+                  sum_inj = sum(INJURIES,na.rm=TRUE),
+                  mean_fata = mean(FATALITIES),
+                  mean_inj = mean(INJURIES)) %>%
+            mutate(sum_fata_inj = sum_fata+sum_inj)
+
+## plot 
+## 1) the top 10 based on the total number of fatality and injury
+## 2) the top 10 based on only fatality 
+## 3) the top 10 based on only injury
+## plot 1
+health1 <- arrange(health,desc(sum_fata_inj))
+g1<- ggplot(data=health1[1:10,],aes(x=reorder(EVTYPE,sum_fata_inj),y=sum_fata_inj)) +
+     geom_bar(stat="identity")  +
+     coord_flip() + 
+     ylab("Total number fatality and injury") + xlab("") +
+     labs(title="Top 10 Most Harmful Events for public health", 
+          subtitle="Based on total number of fatality and injury") +
+     theme(axis.text=element_text(size=8),
+        axis.title=element_text(size=8,face="bold"),
+        title=element_text(size=9,face="bold"))
+## plot 2
+health2 <- arrange(health,desc(sum_fata))
+g2<- ggplot(data=health2[1:10,],aes(x=reorder(EVTYPE,sum_fata),y=sum_fata)) +
+     geom_bar(stat="identity")  +
+     coord_flip() + 
+     ylab("Number of fatality") + xlab("") +
+     labs(subtitle="Based on fatality only") +
+     theme(axis.text=element_text(size=8),
+        axis.title=element_text(size=8,face="bold"),
+        title=element_text(size=9,face="bold"))
+## plot 3
+health3 <- arrange(health,desc(sum_inj))
+g3<- ggplot(data=health3[1:10,],aes(x=reorder(EVTYPE,sum_inj),y=sum_inj)) +
+     geom_bar(stat="identity")  +
+     coord_flip() + 
+     ylab("Number of injury") + xlab("") +
+     labs(subtitle="Based on injury only") +
+     theme(axis.text=element_text(size=8),
+        axis.title=element_text(size=8,face="bold"),
+        title=element_text(size=9,face="bold"))
+
+## plot them in one chart
+# install.packages("multipanelfigure") ##need to run once
+library(multipanelfigure)
+health_plot <- multi_panel_figure(columns = 2, rows = 2, panel_label_type = "none")
+
+health_plot %<>%
+  fill_panel(g1, column = 1:2, row = 1) %<>%
+  fill_panel(g2, column = 1, row = 2) %<>%
+  fill_panel(g3, column = 2, row = 2)
+health_plot
+```
+From the above figure, we can clearly find that the Tornado is the most harmful event that causes the most fatality and injuries during the year from 1950 to 2011. Thunderstorm wind, excessive heat and flood can be considered also very harmful events considered their impact on public health.
+
+
+
+2. Across the United States, which types of events have the greatest economic consequences?
+```{r}
+library(stringr) # load library
+
+## summarize the economic variable: property damage, crop damage 
+## and calculate the total of both types
+economy <- our_data_coded %>%
+        group_by(EVTYPE) %>%
+        summarize(sum_prodm = sum(PROPDMG_T,na.rm=TRUE), 
+                  sum_cropdm = sum(CROPDMG_T,na.rm=TRUE),
+                  mean_prodm = mean(PROPDMG_T,na.rm=TRUE),
+                  mean_cropdm = mean(CROPDMG_T,na.rm=TRUE)) %>%
+            mutate(sum_pro_crop = sum_prodm+sum_cropdm)
+
+## plot 
+## 1) the top 10 based on the damages of both property and crop
+## 2) the top 10 based on only property damage 
+## 3) the top 10 based on only crop damage
+## plot 1
+economy1 <- arrange(economy,desc(sum_pro_crop))
+g4<- ggplot(data=economy1[1:10,],aes(x=reorder(EVTYPE,sum_pro_crop),y=sum_pro_crop)) +
+     geom_bar(stat="identity")  +
+     coord_flip() + 
+     ylab("Property and crop damage") + xlab("") +
+     labs(title="Top 10 Most Harmful Events for economy", subtitle="Based on both property and crop damage") +
+     theme(axis.text=element_text(size=8),
+        axis.title=element_text(size=8,face="bold"),
+        title=element_text(size=9,face="bold"))
+## plot 2
+economy2 <- arrange(economy,desc(sum_prodm))
+g5<- ggplot(data=economy2[1:10,],aes(x=reorder(EVTYPE,sum_prodm),y=sum_prodm)) +
+     geom_bar(stat="identity")  +
+     coord_flip() + 
+     ylab("Property damage") + xlab("") +
+     labs(subtitle="Based on property damage only") +
+     theme(axis.text=element_text(size=8),
+        axis.title=element_text(size=8,face="bold"),
+        title=element_text(size=9,face="bold"))
+## plot 3
+economy3 <- arrange(economy,desc(sum_cropdm))
+g6<- ggplot(data=economy3[1:10,],aes(x=reorder(EVTYPE,sum_cropdm),y=sum_cropdm)) +
+     geom_bar(stat="identity")  +
+     coord_flip() + 
+     ylab("Crop damage") + xlab("") +
+     labs(subtitle="Based on crop damage only") +
+     theme(axis.text=element_text(size=8),
+        axis.title=element_text(size=8,face="bold"),
+        title=element_text(size=9,face="bold"))
+
+## plot them in one chart
+# install.packages("multipanelfigure") ##need to run once
+library(multipanelfigure)
+economy_plot <- multi_panel_figure(columns = 2, rows = 2, panel_label_type = "none")
+
+economy_plot %<>%
+  fill_panel(g4, column = 1:2, row = 1) %<>%
+  fill_panel(g5, column = 1, row = 2) %<>%
+  fill_panel(g6, column = 2, row = 2)
+economy_plot
+
+
+```
+From the perspective of economy, Flood can been concluded as the most harmful event during the year from 1950 to 2011. It has caused the largest damages especially the property damages. Drought, on the other hand, causes more crop damages than flood but it's impact on property is limited. Hurricane/Typhoon is the runner-up and Tornado is in the third place when considering the total damages.
+
+
+
+
